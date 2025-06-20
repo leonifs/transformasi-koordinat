@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformasi Koordinat</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
+  <style>
+    * {
+      font-family: 'Times New Roman', Times, serif;
+      box-sizing: border-box;
+    }
+    body {
+      background-color: #f8f8f8;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 95%;
+      max-width: 360px;
+      background-color: white;
+      padding: 20px 16px;
+      margin: 20px 0;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1, h2, label, p, button {
+      text-align: center;
+    }
+    h1 {
+      font-size: 20px;
+      line-height: 1.4;
+    }
+    input, button, select {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    button {
+      background-color: #d9534f;
+      color: white;
+      border: none;
+    }
+    #map, #map2 {
+      height: 250px;
+      width: 100%;
+      margin: 15px 0;
+      border-radius: 10px;
+    }
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: red;
+      font-style: italic;
+      margin-bottom: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+    .back-button {
+      position: relative;
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-start;
+    }
+    .back-button button {
+      width: auto;
+      font-size: 18px;
+    }
+    .note {
+      font-size: 12px;
+      font-style: italic;
+      text-align: center;
+      color: #555;
+    }
+    .copy-icon {
+      font-size: 12px;
+      color: #007bff;
+      cursor: pointer;
+      position: absolute;
+      bottom: 5px;
+      right: 10px;
+    }
+    .copied-msg {
+      font-size: 12px;
+      color: green;
+      text-align: center;
+      margin-top: 5px;
+    }
+    .result-box {
+      position: relative;
+      background-color: #f0f0f0;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 6px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="menu">
+    <h1>Transformasi Koordinat</h1>
+    <button onclick="showPage('geoToUtm')">Geografis to UTM</button>
+    <button onclick="showPage('utmToGeo')">UTM to Geografis</button>
+  </div>
+
+  <!-- Geografis to UTM -->
+  <div class="container hidden" id="geoToUtm">
+    <h1>Transformasi Koordinat<br>Geografis to UTM</h1>
+    <label>Nama Tempat:</label>
+    <input id="namaTempat" placeholder="Contoh: Monumen Askari">
+    <label>Lintang (Latitude):</label>
+    <input id="lat" placeholder="Contoh: -6.816622">
+    <label>Bujur (Longitude):</label>
+    <input id="lon" placeholder="Contoh: 39.289525">
+    <button onclick="konversiGeoToUTM()">Konversi</button>
+    <div id="hasilGeoToUTM"></div>
+    <div id="map"></div>
+    <div class="note">Formula: Redfearn (presisi tinggi)</div>
+    <div class="back-button"><button onclick="backToMenu()">⬅</button></div>
+  </div>
+
+  <!-- UTM to Geografis -->
+  <div class="container hidden" id="utmToGeo">
+    <h1>Transformasi Koordinat<br>UTM to Geografis</h1>
+    <label>Nama Tempat:</label>
+    <input id="namaUTM" placeholder="Contoh: Monumen Askari">
+    <label>Koordinat X (Easting):</label>
+    <input id="easting" placeholder="Contoh: 531990.787999">
+    <label>Koordinat Y (Northing):</label>
+    <input id="northing" placeholder="Contoh: 9246513.264498">
+    <label>Zona UTM:</label>
+    <input id="zonaUTM" placeholder="Contoh: 37S">
+    <button onclick="konversiUTMToGeo()">Konversi</button>
+    <div id="hasilUTMToGeo"></div>
+    <div id="map2"></div>
+    <div class="back-button"><button onclick="backToMenu()">⬅</button></div>
+  </div>
+
+  <div class="footer">
+    © Leoni Fransiska | Geomatics Engineering | UPNVY 2025
+  </div>
+
+  <script>
+    function showPage(id) {
+      document.getElementById("menu").classList.add("hidden");
+      document.getElementById("geoToUtm").classList.add("hidden");
+      document.getElementById("utmToGeo").classList.add("hidden");
+      document.getElementById(id).classList.remove("hidden");
+      clearForms();
+      setTimeout(() => {
+        if (id === 'geoToUtm') initMap();
+        if (id === 'utmToGeo') initMap2();
+      }, 100);
+    }
+
+    function backToMenu() {
+      document.getElementById("menu").classList.remove("hidden");
+      document.getElementById("geoToUtm").classList.add("hidden");
+      document.getElementById("utmToGeo").classList.add("hidden");
+      clearForms();
+    }
+
+    function clearForms() {
+      document.querySelectorAll('input').forEach(el => el.value = '');
+      document.getElementById('hasilGeoToUTM').innerHTML = '';
+      document.getElementById('hasilUTMToGeo').innerHTML = '';
+    }
+
+    let map, map2;
+    let marker;
+    function initMap() {
+      if (map) map.remove();
+      map = L.map('map').setView([-6.816622, 39.289525], 18);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      map.on('click', function (e) {
+        const latlng = e.latlng;
+        if (marker) map.removeLayer(marker);
+
+        const lat = latlng.lat.toFixed(10);
+        const lon = latlng.lng.toFixed(10);
+
+        document.getElementById("lat").value = lat;
+        document.getElementById("lon").value = lon;
+
+        const nama = document.getElementById("namaTempat").value || "(Tidak diketahui)";
+        const label = `<div style='text-align:center'>${lat}, ${lon}<br>${nama}</div>`;
+
+        marker = L.marker(latlng).addTo(map).bindPopup(label).openPopup();
+      });
+    }
+
+    function initMap2() {
+      if (map2) map2.remove();
+      map2 = L.map('map2').setView([-6.816622, 39.289525], 18);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map2);
+    }
+
+    function konversiGeoToUTM() {
+      const lat = parseFloat(document.getElementById("lat").value);
+      const lon = parseFloat(document.getElementById("lon").value);
+      const nama = document.getElementById("namaTempat").value || "(Tanpa Nama)";
+
+      const zoneNumber = Math.floor((lon + 180) / 6) + 1;
+      const isNorthern = lat >= 0;
+      const hemisphere = isNorthern ? 'N' : 'S';
+
+      const projString = `+proj=utm +zone=${zoneNumber} ${isNorthern ? '' : '+south '}+datum=WGS84 +units=m +no_defs`;
+      const [x, y] = proj4('EPSG:4326', projString, [lon, lat]);
+
+      const resultText = `Easting: ${x.toFixed(6)}, Northing: ${y.toFixed(6)}, Zona UTM: ${zoneNumber}${hemisphere}`;
+
+      document.getElementById("hasilGeoToUTM").innerHTML = `
+        <div class="result-box">
+          <p><strong>Hasil Konversi:</strong><br>
+          Easting: <strong>${x.toFixed(6)}</strong><br>
+          Northing: <strong>${y.toFixed(6)}</strong><br>
+          Zona UTM: <strong>${zoneNumber}${hemisphere}</strong><br>
+          Nama Tempat: <strong>${nama}</strong></p>
+          <div class="copy-icon" onclick="copyToClipboard('${resultText}')">📋</div>
+          <div class="copied-msg" id="copiedMsg" style="display:none">Koordinat disalin</div>
+        </div>`;
+
+      if (map) {
+        map.setView([lat, lon], 18);
+        L.marker([lat, lon]).addTo(map)
+          .bindPopup(`<div style='text-align:center'>${x.toFixed(6)}, ${y.toFixed(6)}<br>${nama}</div>`)
+          .openPopup();
+      }
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const msg = document.getElementById("copiedMsg");
+        if (msg) {
+          msg.style.display = "block";
+          setTimeout(() => msg.style.display = "none", 2000);
+        }
+      });
+    }
+
+    function konversiUTMToGeo() {
+      const easting = parseFloat(document.getElementById("easting").value);
+      const northing = parseFloat(document.getElementById("northing").value);
+      const zonaUTM = document.getElementById("zonaUTM").value.trim();
+      const nama = document.getElementById("namaUTM").value || "(Tanpa Nama)";
+
+      const zoneNumber = parseInt(zonaUTM);
+      const hemisphere = zonaUTM[zonaUTM.length - 1].toUpperCase();
+      const isNorthern = hemisphere === 'N';
+
+      const projString = `+proj=utm +zone=${zoneNumber} ${isNorthern ? '' : '+south '}+datum=WGS84 +units=m +no_defs`;
+      const [lon, lat] = proj4(projString, 'EPSG:4326', [easting, northing]);
+
+      const resultText = `Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}, Nama Tempat: ${nama}`;
+
+      document.getElementById("hasilUTMToGeo").innerHTML = `
+        <div class="result-box">
+          <p><strong>Hasil Konversi:</strong><br>
+          Latitude: <strong>${lat.toFixed(6)}</strong><br>
+          Longitude: <strong>${lon.toFixed(6)}</strong><br>
+          Nama Tempat: <strong>${nama}</strong></p>
+          <div class="copy-icon" onclick="copyToClipboard('${resultText}')">📋</div>
+          <div class="copied-msg" id="copiedMsg" style="display:none">Koordinat disalin</div>
+        </div>`;
+
+      if (map2) {
+        map2.setView([lat, lon], 18);
+        L.marker([lat, lon]).addTo(map2)
+          .bindPopup(`<div style='text-align:center'>${lat.toFixed(6)}, ${lon.toFixed(6)}<br>${nama}</div>`)
+          .openPopup();
+      }
+    }
+  </script>
+</body>
+</html>
